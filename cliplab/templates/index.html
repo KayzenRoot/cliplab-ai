@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111219">
+  <title>ClipLab AI</title>
+  <link rel="stylesheet" href="/static/studio.css">
+  <script src="/static/studio.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir para o conteúdo</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/" aria-label="ClipLab AI, início">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>ClipLab <strong>AI</strong></span>
+      </a>
+      <span class="local-status"><i aria-hidden="true"></i> Processamento local</span>
+    </div>
+  </header>
+
+  <main class="shell" id="main">
+    <div class="intro">
+      <h1>Estúdio de cortes<span aria-hidden="true">.</span></h1>
+      <p>Transforme gravações e lives arquivadas em cortes verticais para revisar e exportar.</p>
+    </div>
+    <noscript><p class="alert">Ative o JavaScript para usar o estúdio.</p></noscript>
+    <p id="connection-error" class="alert" role="alert" hidden></p>
+
+    <div class="workspace">
+      <section class="panel intake" aria-labelledby="source-heading">
+        <div class="panel-heading">
+          <h2 id="source-heading">Gravação e edição</h2>
+        </div>
+
+        <form id="job-form">
+          <label class="field single">
+            <span>Link do YouTube</span>
+            <input name="youtube_url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=…" aria-describedby="youtube-help" required>
+            <small id="youtube-help">Cole o link de um vídeo público ou de uma live pública já encerrada.</small>
+          </label>
+
+          <fieldset class="form-section">
+            <legend>Direitos da gravação</legend>
+            <label class="check">
+              <input name="authorized" type="checkbox" value="true" required>
+              <span>Tenho os direitos da gravação ou uma licença que permite edição e uso comercial.</span>
+            </label>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>Configuração dos cortes</legend>
+            <div class="fields">
+              <label class="field"><span>Quantidade</span>
+                <select name="count">
+                  <option value="1">1 corte</option>
+                  <option value="2">2 cortes</option>
+                  <option value="3" selected>3 cortes</option>
+                  <option value="4">4 cortes</option>
+                  <option value="5">5 cortes</option>
+                </select>
+              </label>
+              <label class="field"><span>Preset visual</span>
+                <select name="preset">
+                  <option value="dossier">Dossiê Leonida</option>
+                  <option value="gameplay">Gameplay</option>
+                </select>
+              </label>
+              <label class="field"><span>Duração mínima (s)</span><input type="number" name="minimum" min="61" max="180" value="75" required></label>
+              <label class="field"><span>Duração máxima (s)</span><input type="number" name="maximum" min="61" max="180" value="100" required></label>
+              <label class="field"><span>Idioma das legendas</span>
+                <select name="language">
+                  <option value="auto">Detectar automaticamente</option>
+                  <option value="pt">Português (Brasil)</option>
+                </select>
+              </label>
+              <label class="field"><span>Destaque visual</span>
+                <select name="emphasis">
+                  <option value="low">Baixo</option>
+                  <option value="medium" selected>Médio</option>
+                  <option value="high">Alto</option>
+                </select>
+              </label>
+            </div>
+            <label class="check" id="ollama-option" hidden>
+              <input name="use_ollama" type="checkbox" value="true">
+              <span>Usar avaliação semântica do Ollama local.</span>
+            </label>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>Trilha sonora</legend>
+            <div class="fields">
+              <label class="field"><span>Tipo de trilha</span>
+                <select name="music_mode" id="music-mode">
+                  <option value="off">Sem trilha</option>
+                  <option value="procedural" selected>Ambiente original</option>
+                  <option value="licensed">Biblioteca licenciada</option>
+                </select>
+              </label>
+              <label class="field" id="volume-field">
+                <span class="split">Volume <output for="music-volume" id="volume-value">10%</output></span>
+                <input type="range" id="music-volume" name="music_volume" min="0" max="0.30" step="0.01" value="0.10">
+              </label>
+              <label class="field full" id="library-field" hidden>
+                <span>Faixa cadastrada</span>
+                <select name="music_id" id="music-select" disabled><option value="">Selecione uma faixa</option></select>
+                <small id="music-attribution"></small>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="submit-area">
+            <button class="button primary" type="submit" id="generate"><span>Gerar cortes com IA</span><span aria-hidden="true">↗</span></button>
+            <p id="form-error" class="alert" role="alert" hidden></p>
+          </div>
+        </form>
+
+        <details class="music-register" id="music-register">
+          <summary>Cadastrar faixa licenciada</summary>
+          <form id="music-form" enctype="multipart/form-data">
+            <div class="fields">
+              <label class="field full"><span>Arquivo de áudio</span><input type="file" name="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac" required></label>
+              <label class="field"><span>Título</span><input name="title" maxlength="200" required></label>
+              <label class="field"><span>Autor</span><input name="author" maxlength="200" required></label>
+              <label class="field"><span>Licença</span><input name="license" maxlength="500" required></label>
+              <label class="field"><span>Origem</span><input name="origin" maxlength="500" required></label>
+              <label class="field full"><span>Atribuição exigida <small>opcional</small></span><textarea name="attribution" rows="2" maxlength="1000"></textarea></label>
+            </div>
+            <label class="check"><input type="checkbox" name="authorized" value="true" required><span>Tenho autorização comercial para usar esta faixa nas exportações.</span></label>
+            <button class="button secondary" type="submit">Salvar faixa</button>
+            <p id="music-notice" role="status" hidden></p>
+          </form>
+        </details>
+      </section>
+
+      <section id="review" class="panel review" aria-labelledby="review-heading">
+        <div class="panel-heading">
+          <h2 id="review-heading" tabindex="-1">Revisão e exportação</h2>
+        </div>
+
+        <div id="job-picker" class="job-picker" hidden>
+          <label class="field"><span>Gravação</span><select id="job-select"></select></label>
+        </div>
+        <details class="source-data" id="source-data" hidden>
+          <summary>Origem e direitos de uso</summary>
+          <dl id="source-metadata"></dl>
+        </details>
+
+        <div id="job-progress" class="project-progress" hidden>
+          <div class="split"><strong id="job-state"></strong><span id="progress-number" class="muted mono"></span></div>
+          <progress id="pipeline-progress" max="100" value="0" aria-label="Processamento da gravação"></progress>
+          <p id="job-status" class="muted" role="status"></p>
+          <p id="job-error" class="alert" role="alert" hidden></p>
+          <ul id="job-warnings" class="warnings" hidden></ul>
+          <div class="action-row">
+            <button class="button secondary" type="button" id="cancel-job" hidden>Cancelar</button>
+            <button class="button secondary" type="button" id="retry-job" hidden>Reprocessar</button>
+            <a class="button subtle" id="job-log" download="cliplab.log" hidden>Baixar log</a>
+          </div>
+        </div>
+
+        <div class="clip-list" id="clip-list" aria-label="Cortes gerados" hidden></div>
+        <div class="monitor">
+          <div class="monitor-top"><span><i aria-hidden="true"></i> Monitor de prévia</span><span class="mono">9:16</span></div>
+          <div class="monitor-stage" id="monitor-stage">
+            <div class="empty-preview" id="empty-preview">
+              <div class="frame-glyph" aria-hidden="true"><span></span></div>
+              <strong id="preview-heading">Seus cortes aparecem aqui</strong>
+              <p id="preview-detail">Cole um link do YouTube para começar.</p>
+            </div>
+            <video id="video" controls playsinline preload="metadata" aria-label="Prévia do corte selecionado" hidden></video>
+          </div>
+          <div class="monitor-bottom"><span id="monitor-duration">Formato vertical</span><span class="mono">MP4 · 30 FPS</span></div>
+        </div>
+
+        <div id="clip-details" class="clip-details" hidden>
+          <div class="split detail-heading">
+            <h3 id="clip-title"></h3>
+            <span id="clip-status" class="clip-state"></span>
+          </div>
+          <p class="score" id="clip-score"></p>
+          <p id="clip-rationale" class="muted"></p>
+          <ul id="clip-warnings" class="warnings" hidden></ul>
+          <p id="clip-error" class="alert" role="alert" hidden></p>
+          <p id="clip-operation" class="operation" role="status" hidden></p>
+          <progress id="clip-progress" max="100" aria-label="Renderização do corte" hidden></progress>
+
+          <form id="clip-form">
+            <div class="fields">
+              <label class="field"><span>Início na gravação (s)</span><input type="number" name="start" min="0" step="0.001" required></label>
+              <label class="field"><span>Fim na gravação (s)</span><input type="number" name="end" min="0" step="0.001" required></label>
+              <label class="field full"><span>Título</span><input name="title" maxlength="90" required></label>
+              <label class="field full"><span>Gancho</span><textarea name="hook" maxlength="140" rows="2"></textarea></label>
+              <label class="field full"><span>Descrição da publicação</span><textarea name="description" maxlength="1200" rows="3"></textarea></label>
+            </div>
+            <small class="muted">Alterações de tempo, título ou gancho geram uma nova prévia.</small>
+            <button class="button secondary" type="submit" id="save-clip">Salvar ajustes</button>
+          </form>
+
+          <details class="editorial">
+            <summary>Revisão editorial</summary>
+            <dl id="editorial-data"></dl>
+            <p>Ao revisar materiais de terceiros, considere que cortes, legendas, trilha e elementos visuais, por si só, não asseguram originalidade ou monetização.</p>
+          </details>
+
+          <div class="action-row clip-actions">
+            <button class="button secondary" type="button" id="approve-clip">Aprovar corte</button>
+            <button class="button subtle" type="button" id="discard-clip">Descartar</button>
+            <button class="button subtle" type="button" id="retry-preview" hidden>Refazer prévia</button>
+            <button class="button primary small" type="button" id="export-clip">Exportar em 1080 × 1920</button>
+            <a class="button secondary" id="download-mp4" download hidden>Baixar MP4</a>
+            <a class="button subtle" id="download-srt" download hidden>Baixar SRT do corte</a>
+          </div>
+          <p id="clip-notice" class="form-notice" role="status" hidden></p>
+        </div>
+
+        <div class="export-actions action-row" id="project-downloads" hidden>
+          <a class="button secondary" id="project-zip" download hidden>Baixar todos (ZIP)</a>
+          <a class="button subtle" id="transcript-srt" download hidden>Transcrição em SRT</a>
+          <a class="button subtle" id="transcript-json" download hidden>Transcrição em JSON</a>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

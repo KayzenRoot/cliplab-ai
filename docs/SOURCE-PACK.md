@@ -6,7 +6,7 @@ ClipLab AI é um estúdio de vídeo local, de usuário único, para gerar e revi
 
 ## Requisitos
 
-- Ingestão MP4/MKV/MOV com áudio, autoria, origem, autorização comercial e referência opcional do YouTube. Validar container, tamanho, duração, integridade e disco.
+- Ingestão pela URL de um vídeo público do YouTube, com declaração de direitos e registro automático de título, canal e origem. A API também aceita arquivos MP4/MKV/MOV para clientes existentes. Validar container, tamanho, duração, integridade e disco.
 - Transcrição real com faster-whisper, CPU/int8, VAD, palavras temporizadas, idioma automático/pt-BR, sinalização de baixa confiança e cache JSON com exportação SRT.
 - Seleção editorial baseada na fala, limites de frases, pausa, densidade, gancho, desfecho e baixa sobreposição. Selecionar 1–5 cortes válidos, entre 61 e 180 s, padrão 75–100 s. Ollama local opcional e fallback determinístico.
 - Layouts Gameplay e Dossiê Leonida, título, gancho, legenda ASS com palavra ativa, SRT, prévia e final MP4 1080 × 1920, 30 FPS, H.264/AAC.
@@ -15,7 +15,7 @@ ClipLab AI é um estúdio de vídeo local, de usuário único, para gerar e revi
 
 ## Escopo
 
-Gravações em arquivo obtido com autorização, inclusive lives arquivadas. URL do YouTube é metadado. Interface em português e presets locais. Captura contínua, importação direta remota, SaaS, pagamentos, publicação automática e timeline avançada ficam fora da primeira versão.
+O fluxo do estúdio começa com o link de um vídeo público do YouTube disponível sem login, inclusive lives já arquivadas. A declaração de direitos continua obrigatória. A entrada de arquivo autorizada permanece na API para compatibilidade. Interface em português e presets locais. Captura contínua, outros provedores de vídeo, SaaS, pagamentos, publicação automática e timeline avançada ficam fora do escopo.
 
 ## Arquitetura
 
@@ -49,5 +49,6 @@ Source Pack anterior à implementação. Interface local verificada, importaçã
 | D02 | faster-whisper CPU/int8 e classificação determinística por padrão. Ollama pontua candidatos existentes quando optado e disponível. |
 | D03 | Prévia de 540 × 960 na fila inicial. Exportação de 1080 × 1920 sob aprovação. |
 | D04 | Trilha opcional. Metadados de licença e atribuição entram no pacote de exportação. |
-| D05 | Origem do YouTube serve de referência. O operador fornece o arquivo autorizado. |
+| D05 | Na entrega inicial, a origem do YouTube servia de referência. Substituída por D07 na interface. |
 | D06 | A primeira transcrição pode baixar pesos para cache local. A mídia é processada na máquina. |
+| D07 | A interface envia somente o link e a declaração de direitos. O worker importa a mídia pública na etapa IMPORTING, valida o arquivo e o reaproveita em novas tentativas do mesmo projeto. |
