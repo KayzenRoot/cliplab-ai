@@ -213,6 +213,7 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
     config.prepare()
     store = Store(config.data / "cliplab.sqlite3")
     worker: Worker | None = None
+    zip_build = threading.Lock()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -423,15 +424,20 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
 
         def change(job: dict) -> None:
             clip = editable(job, clip_id)
-            start = round(changes.get("start", clip["start"]), 3)
-            end = round(changes.get("end", clip["end"]), 3)
-            duration = round(end - start, 3)
+            start, end = clip["start"], clip["end"]
+            if "start" in changes and round(changes["start"], 3) != round(start, 3):
+                start = round(changes["start"], 3)
+            if "end" in changes and round(changes["end"], 3) != round(end, 3):
+                end = round(changes["end"], 3)
+            timing = (start, end) != (clip["start"], clip["end"])
             cfg = job["settings"]
-            if not (cfg["minimum"] <= duration <= cfg["maximum"] and end <= job["duration"]):
+            duration = round(end - start, 3)
+            if timing and not (
+                cfg["minimum"] <= duration <= cfg["maximum"] and end <= job["duration"]
+            ):
                 raise HTTPException(
                     422, "Ajuste os tempos aos limites do vídeo e da duração escolhida."
                 )
-            timing = (start, end) != (clip["start"], clip["end"])
             visual = timing or any(
                 key in changes and changes[key] != clip[key] for key in ("title", "hook")
             )
@@ -498,7 +504,12 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
         job = store.get(valid_id(job_id))
         directory = config.data / "output" / job_id
         if artifact == "zip":
-            return create_zip(config, store, job, directory)
+            if not zip_build.acquire(blocking=False):
+                raise HTTPException(429, "Aguarde o ZIP que já está sendo preparado.")
+            try:
+                return create_zip(config, store, job, directory)
+            finally:
+                zip_build.release()
         if not job["transcript_available"]:
             raise MissingRecord("A transcrição ainda não está disponível.")
         media_type = "application/json" if artifact.endswith(".json") else "application/x-subrip"

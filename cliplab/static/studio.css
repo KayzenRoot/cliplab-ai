@@ -4,6 +4,7 @@
   --surface: #181b25;
   --inset: #12141c;
   --line: #33374a;
+  --control-line: #646d84;
   --text: #f4f4f8;
   --muted: #b1b6c8;
   --aqua: #76ece0;
@@ -116,7 +117,7 @@ button:disabled { cursor: default; opacity: .5; }
 .field :is(input:not([type="range"]), select, textarea) {
   width: 100%;
   min-height: 2.6rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: .55rem;
   padding: .55rem .63rem;
   background: var(--inset);
@@ -153,9 +154,9 @@ input:is([type="checkbox"], [type="range"]), progress { accent-color: var(--aqua
 .button.primary:hover:not(:disabled) { background: #a1f7ee; border-color: #a1f7ee; }
 .submit-area .primary { width: 100%; min-height: 3.05rem; padding-inline: .9rem; justify-content: space-between; font-size: .97rem; }
 .submit-area .primary span:last-child { font-size: 1.2rem; }
-.button.secondary { background: #29303f; border-color: #465064; }
+.button.secondary { background: #29303f; border-color: var(--control-line); }
 .button.secondary:hover:not(:disabled) { background: #34405a; border-color: #68798e; }
-.button.subtle { border-color: #414759; }
+.button.subtle { border-color: var(--control-line); }
 .button.subtle:hover:not(:disabled) { background: #252936; }
 .music-register, .editorial { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--line); }
 .music-register summary, .editorial summary, .source-data summary { cursor: pointer; color: var(--muted); font-size: .84rem; font-weight: 630; }
@@ -274,6 +275,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, #59c9c9, var(--
 @media (max-width: 53rem) {
   .shell { width: min(100% - 2rem, 42rem); }
   .workspace { grid-template-columns: minmax(0, 1fr); }
+  .field :is(input:not([type="range"]), select, textarea) { font-size: 1rem; }
 }
 @media (max-width: 25rem) {
   .shell { width: calc(100% - 1.2rem); }

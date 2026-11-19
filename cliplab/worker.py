@@ -137,7 +137,7 @@ class Worker:
                 with TemporaryDirectory(prefix="audio-", dir=data / "tmp") as temporary:
                     work = Path(temporary)
                     audio = work / "audio.wav"
-                    extract_audio(source, audio, cancel=cancel)
+                    extract_audio(source, audio, duration=duration, cancel=cancel)
                     self.stage(job_id, "TRANSCRIBING", 15, "Transcrevendo a fala no computador.")
                     transcript = self.transcriber.transcribe(
                         audio,

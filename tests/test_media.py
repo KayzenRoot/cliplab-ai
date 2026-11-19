@@ -115,15 +115,52 @@ def test_probe_supports_alternative_containers(fixture_video, tmp_path, suffix):
 def test_extract_pcm_and_cancel(fixture_video, tmp_path):
     path = tmp_path / "audio.wav"
     with pytest.raises(MediaCancelled):
-        extract_audio(fixture_video, path, cancel=lambda: True)
+        extract_audio(fixture_video, path, duration=68, cancel=lambda: True)
     assert not path.exists()
     assert not list(tmp_path.iterdir())
 
-    extract_audio(fixture_video, path)
+    extract_audio(fixture_video, path, duration=12)
     with wave.open(str(path)) as wav:
         assert (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) == (1, 2, 16000)
-        assert wav.getnframes() / 16000 == pytest.approx(68.0, abs=0.05)
+        assert wav.getnframes() / 16000 == pytest.approx(12.0, abs=0.05)
         assert len(set(wav.readframes(16000))) > 10
+
+
+@pytest.mark.media
+def test_probe_preserves_recording_timeline_with_delayed_audio(fixture_video, tmp_path):
+    delayed = tmp_path / "delayed.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-i",
+            str(fixture_video),
+            "-itsoffset",
+            "10",
+            "-i",
+            str(fixture_video),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-t",
+            "68",
+            "-c",
+            "copy",
+            str(delayed),
+        ],
+        check=True,
+        timeout=60,
+    )
+    media = probe_source(delayed, 100)
+    assert media["duration"] == pytest.approx(68.0, abs=0.08)
+    wav_path = tmp_path / "offset.wav"
+    extract_audio(delayed, wav_path, duration=media["duration"])
+    with wave.open(str(wav_path)) as wav:
+        assert wav.getnframes() / 16000 == pytest.approx(68.0, abs=0.08)
+        assert not any(wav.readframes(9 * 16000))
 
 
 def _word(start, end, text, probability=0.98):

@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import tempfile
@@ -9,7 +10,7 @@ from starlette.background import BackgroundTask
 
 from .config import MIB, Config
 from .store import Conflict, MissingRecord, Store, revision_files
-from .worker import require_disk
+from .worker import Blocked, require_disk
 
 
 def create_zip(config: Config, store: Store, job: dict, directory: Path) -> FileResponse:
@@ -66,14 +67,15 @@ def create_zip(config: Config, store: Store, job: dict, directory: Path) -> File
         if path.is_file():
             files[filename] = path
 
-    fd, filename = tempfile.mkstemp(prefix="zip-", suffix=".zip", dir=config.data / "tmp")
-    os.close(fd)
-    archive = Path(filename)
+    archive = None
     try:
         require_disk(
             config.data,
             config.min_free + sum(path.stat().st_size for path in files.values()) + 4 * MIB,
         )
+        fd, filename = tempfile.mkstemp(prefix="zip-", suffix=".zip", dir=config.data / "tmp")
+        archive = Path(filename)
+        os.close(fd)
         with ZipFile(archive, "w", compression=ZIP_STORED) as package:
             for name, path in files.items():
                 package.write(path, name)
@@ -81,10 +83,18 @@ def create_zip(config: Config, store: Store, job: dict, directory: Path) -> File
             if credits:
                 package.writestr("atribuicao-musical.txt", "\n\n".join(credits))
     except FileNotFoundError as exc:
-        archive.unlink(missing_ok=True)
+        if archive is not None:
+            archive.unlink(missing_ok=True)
         raise Conflict("Os arquivos mudaram durante a exportação. Tente novamente.") from exc
+    except OSError as exc:
+        if archive is not None:
+            archive.unlink(missing_ok=True)
+        if exc.errno == errno.ENOSPC:
+            raise Blocked("Espaço em disco insuficiente para preparar o ZIP.") from exc
+        raise
     except BaseException:
-        archive.unlink(missing_ok=True)
+        if archive is not None:
+            archive.unlink(missing_ok=True)
         raise
     return FileResponse(
         archive,

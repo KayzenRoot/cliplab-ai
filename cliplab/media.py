@@ -109,8 +109,8 @@ def _input(path: Path, formats: dict[str, str]) -> list[str]:
 
 def _ffprobe(path: Path, formats: dict[str, str], cancel: CancelCheck | None) -> dict:
     entries = (
-        "format=duration,format_name:"
-        "stream=codec_type,codec_name,width,height,duration,r_frame_rate,"
+        "format=duration,format_name,start_time:"
+        "stream=codec_type,codec_name,width,height,duration,start_time,r_frame_rate,"
         "avg_frame_rate,sample_aspect_ratio,display_aspect_ratio:"
         "stream_disposition=attached_pic"
     )
@@ -141,6 +141,14 @@ def _duration(item: dict) -> float | None:
     except (KeyError, TypeError, ValueError):
         return None
     return value if math.isfinite(value) and value > 0 else None
+
+
+def _start_time(item: dict, default: float = 0.0) -> float:
+    try:
+        value = float(item["start_time"])
+    except (KeyError, TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) else default
 
 
 def _streams(info: dict) -> tuple[dict, dict]:
@@ -190,13 +198,19 @@ def probe_source(path: Path, max_seconds: float, *, cancel: CancelCheck | None =
     video, audio = _streams(info)
     if not (video and audio):
         raise MediaError("A gravação precisa conter uma faixa de vídeo e uma faixa de áudio.")
-    container_duration = _duration(info.get("format", {}))
+    container = info.get("format", {})
+    container_duration = _duration(container)
     if container_duration is None:
         raise MediaError("Não foi possível verificar a duração da gravação.")
     if container_duration > max_seconds:
         raise MediaError("A gravação excede o limite de duração configurado.")
-    durations = [container_duration, _duration(video), _duration(audio)]
-    duration = min(value for value in durations if value is not None)
+    container_start = _start_time(container)
+    ends = [container_duration]
+    for stream in (video, audio):
+        stream_length = _duration(stream)
+        if stream_length is not None:
+            ends.append(_start_time(stream, container_start) - container_start + stream_length)
+    duration = min(ends)
     if duration < MIN_SECONDS:
         raise MediaError("A gravação precisa ter pelo menos 61 segundos de vídeo e áudio.")
     width, height = video.get("width", 0), video.get("height", 0)
@@ -222,7 +236,9 @@ def probe_music(path: Path, *, cancel: CancelCheck | None = None) -> dict:
     return {"duration": duration, "codec": audio["codec_name"]}
 
 
-def extract_audio(source: Path, output: Path, *, cancel: CancelCheck | None = None) -> None:
+def extract_audio(
+    source: Path, output: Path, *, duration: float, cancel: CancelCheck | None = None
+) -> None:
     """Stream a 16 kHz PCM waveform on the original source timeline."""
     with tempfile.TemporaryDirectory(prefix="audio-", dir=output.parent) as scratch:
         temporary = Path(scratch) / "audio.wav"
@@ -245,6 +261,10 @@ def extract_audio(source: Path, output: Path, *, cancel: CancelCheck | None = No
                 "aresample=16000:async=1:first_pts=0",
                 "-c:a",
                 "pcm_s16le",
+                "-t",
+                f"{duration:.6f}",
+                "-fs",
+                str(math.ceil(duration * 32000) + 1024 * 1024),
                 "-f",
                 "wav",
                 str(temporary),

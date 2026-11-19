@@ -1,14 +1,18 @@
 import io
 import json
 import shutil
+import threading
 import time
 import wave
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from fastapi.responses import PlainTextResponse
 from fastapi.testclient import TestClient
 
+import cliplab.app as app_module
 from cliplab.app import create_app
 from cliplab.config import MIB, Config
 from cliplab.store import revision_files
@@ -87,6 +91,69 @@ def test_streaming_body_is_bounded_without_content_length(client):
     )
     assert response.status_code in {400, 413}
     assert not list((config.data / "input").iterdir())
+
+
+def test_review_keeps_fractional_automatic_timestamps(client):
+    http, _, store = client
+    job = upload(http).json()
+    end = 77.05799999999999
+    clip = {
+        "id": "a" * 32,
+        "start": 2.058,
+        "end": end,
+        "status": "pending",
+        "revision": 1,
+        "preview_ready": True,
+        "operation": None,
+        "title": "Trecho automático",
+        "hook": "",
+    }
+    store.update(
+        job["id"],
+        lambda row: row.update(
+            state="READY_FOR_REVIEW",
+            duration=end,
+            clips=[clip],
+        ),
+    )
+    endpoint = f"/api/jobs/{job['id']}/clips/{clip['id']}"
+    edited = http.patch(
+        endpoint,
+        headers=HEADERS,
+        json={
+            "start": 2.058,
+            "end": 77.058,
+            "description": "Edição só do texto",
+        },
+    ).json()
+    assert edited["end"] == end
+    assert edited["operation"] is None
+    approved = http.patch(endpoint, headers=HEADERS, json={"status": "approved"}).json()
+    assert approved["status"] == "approved"
+    assert approved["revision"] == 1
+
+
+def test_simultaneous_zip_requests_serialize_disk_writes(client, monkeypatch):
+    http, _, _ = client
+    job = upload(http).json()
+    endpoint = f"/api/jobs/{job['id']}/zip"
+    writing = threading.Event()
+    finish = threading.Event()
+
+    def slow_zip(*_args):
+        writing.set()
+        assert finish.wait(5)
+        return PlainTextResponse("archive ready")
+
+    monkeypatch.setattr(app_module, "create_zip", slow_zip)
+    with ThreadPoolExecutor(max_workers=1) as requests:
+        first = requests.submit(http.get, endpoint)
+        try:
+            assert writing.wait(5)
+            assert http.get(endpoint).status_code == 429
+        finally:
+            finish.set()
+        assert first.result(timeout=5).status_code == 200
 
 
 def test_persistent_queue_recovery_and_cancel(client):
