@@ -21,6 +21,7 @@ from .media import (
     verify_output,
 )
 from .store import Conflict, Store, clip_by_id, identity, revision_files
+from .youtube import YouTubeUnavailable, download_video
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +113,55 @@ class Worker:
 
         return report
 
+    def import_youtube(self, job, directory, cancel):
+        job_id = job["id"]
+        data = self.config.data
+        self.stage(job_id, "IMPORTING", 5, "Importando o vídeo público do YouTube.")
+        require_disk(data, self.config.min_free)
+        with TemporaryDirectory(prefix="youtube-", dir=data / "tmp") as temporary:
+            try:
+                staged, title, author = download_video(
+                    job["source"]["video_id"],
+                    Path(temporary),
+                    self.config,
+                    job["settings"]["minimum"],
+                    cancel=cancel,
+                    progress=self.progress(job_id, 5, 25),
+                )
+            except YouTubeUnavailable as exc:
+                raise Blocked(str(exc)) from exc
+            probe = probe_source(staged, self.config.max_seconds, cancel=cancel)
+            if cancel():
+                raise MediaCancelled("Importação cancelada.")
+            directory.mkdir(exist_ok=True)
+            staged.replace(directory / staged.name)
+            job = self.store.update(
+                job_id,
+                lambda row: row.update(
+                    stored_name=staged.name,
+                    filename=title or row["filename"],
+                    source={**row["source"], "author": author},
+                ),
+            )
+        return job, probe
+
     def process(self, job_id: str) -> None:
         cancel = self.cancellation(job_id)
         data = self.config.data
         try:
             job = self.stage(job_id, "VALIDATING", 3, "Validando vídeo e áudio.")
-            source = data / "input" / job_id / job["stored_name"]
+            directory = data / "input" / job_id
+            stored_name = job["stored_name"]
+            require_disk(data, self.config.min_free)
+            if job["source"].get("kind") == "youtube" and not stored_name:
+                job, probe = self.import_youtube(job, directory, cancel)
+            else:
+                probe = probe_source(
+                    directory / stored_name, self.config.max_seconds, cancel=cancel
+                )
+            source = directory / job["stored_name"]
             output = data / "output" / job_id
             output.mkdir(exist_ok=True)
-            require_disk(data, self.config.min_free)
-            probe = probe_source(source, self.config.max_seconds, cancel=cancel)
             duration = probe["duration"]
             settings = job["settings"]
             if duration < settings["minimum"]:
@@ -132,18 +172,22 @@ class Worker:
             else:
                 require_disk(data, self.config.min_free + int(duration * 64_000))
                 self.stage(
-                    job_id, "EXTRACTING_AUDIO", 8, "Extraindo áudio da gravação.", duration=duration
+                    job_id,
+                    "EXTRACTING_AUDIO",
+                    28,
+                    "Extraindo áudio da gravação.",
+                    duration=duration,
                 )
                 with TemporaryDirectory(prefix="audio-", dir=data / "tmp") as temporary:
                     work = Path(temporary)
                     audio = work / "audio.wav"
                     extract_audio(source, audio, duration=duration, cancel=cancel)
-                    self.stage(job_id, "TRANSCRIBING", 15, "Transcrevendo a fala no computador.")
+                    self.stage(job_id, "TRANSCRIBING", 32, "Transcrevendo a fala no computador.")
                     transcript = self.transcriber.transcribe(
                         audio,
                         settings["language"],
                         cancel=cancel,
-                        progress=self.progress(job_id, 15, 58),
+                        progress=self.progress(job_id, 32, 58),
                     )
                     srt = work / "transcript.srt"
                     write_srt(srt, transcript)

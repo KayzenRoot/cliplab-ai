@@ -52,3 +52,9 @@ FFprobe confirmou 90,980000 s, 1080 × 1920, 9:16, 30/1 fps, H.264 e AAC. A deco
 ## Limites da evidência
 
 Integração com uma instância real do Ollama, gravações com várias horas e material real de gameplay permanecem sem execução neste ciclo. A aplicação executou integralmente no Windows. A suíte executou no Linux hospedado e o script Linux passou na verificação de sintaxe. O modo automático usa sinais da fala, e o operador revisa eventuais erros de transcrição, recortes e atribuições antes de publicar.
+
+## Entrada por link do YouTube
+
+A revisão D07 acrescentou a importação pelo link ao CLIP-MVP-001. Um teste no Chrome enviou a URL e a declaração de direitos sem selecionar arquivo. A API normalizou links de vídeo, Shorts e lives, rejeitou outros domínios e playlists isoladas, e preservou a gravação em tentativas posteriores do mesmo projeto.
+
+O smoke real no Windows usou a introdução ao telescópio James Webb publicada pela NASA. A fila importou os 223,721 s da fonte pelo link público, registrou o canal, transcreveu, gerou uma prévia e produziu um MP4 vertical H.264/AAC de 76,900 s a 30 fps em 1080 × 1920 após aprovação. [Fonte de teste](https://science.nasa.gov/mission/webb/webb-videos/)

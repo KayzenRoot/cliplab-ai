@@ -35,29 +35,15 @@
           <h2 id="source-heading">Gravação e edição</h2>
         </div>
 
-        <form id="job-form" enctype="multipart/form-data">
-          <div id="drop-zone" class="drop-zone">
-            <div class="upload-glyph" aria-hidden="true">↑</div>
-            <label for="file">Arraste sua gravação</label>
-            <input class="visually-hidden" id="file" type="file" name="file" accept=".mp4,.mkv,.mov">
-            <p>MP4, MKV ou MOV <span id="upload-limit"></span></p>
-            <button class="button subtle" type="button" id="choose-file">Selecionar arquivo</button>
-            <span id="file-name" class="file-name" aria-live="polite"></span>
-          </div>
-
+        <form id="job-form">
           <label class="field single">
-            <span>URL de referência <small>opcional</small></span>
-            <input name="youtube_url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=…">
-            <small>Use a URL como referência e envie o original ou uma cópia autorizada, como uma exportação do YouTube Studio.</small>
+            <span>Link do YouTube</span>
+            <input name="youtube_url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=…" aria-describedby="youtube-help" required>
+            <small id="youtube-help">Cole o link de um vídeo público ou de uma live pública já encerrada.</small>
           </label>
 
           <fieldset class="form-section">
             <legend>Direitos da gravação</legend>
-            <div class="fields">
-              <label class="field"><span>Autor</span><input name="author" maxlength="200" placeholder="Quem criou a gravação" required></label>
-              <label class="field"><span>Origem</span><input name="origin" maxlength="300" placeholder="Minha live no YouTube" required></label>
-              <label class="field full"><span>Licença e condições de uso</span><input name="license" maxlength="500" placeholder="Material próprio ou licença comercial" required></label>
-            </div>
             <label class="check">
               <input name="authorized" type="checkbox" value="true" required>
               <span>Tenho os direitos da gravação ou uma licença que permite edição e uso comercial.</span>
@@ -128,10 +114,6 @@
 
           <div class="submit-area">
             <button class="button primary" type="submit" id="generate"><span>Gerar cortes com IA</span><span aria-hidden="true">↗</span></button>
-            <div class="upload-meter" id="upload-meter" hidden>
-              <progress id="upload-progress" max="100" aria-label="Envio da gravação"></progress>
-              <span id="upload-status" role="status"></span>
-            </div>
             <p id="form-error" class="alert" role="alert" hidden></p>
           </div>
         </form>
@@ -187,7 +169,7 @@
             <div class="empty-preview" id="empty-preview">
               <div class="frame-glyph" aria-hidden="true"><span></span></div>
               <strong id="preview-heading">Seus cortes aparecem aqui</strong>
-              <p id="preview-detail">Envie uma gravação para começar.</p>
+              <p id="preview-detail">Cole um link do YouTube para começar.</p>
             </div>
             <video id="video" controls playsinline preload="metadata" aria-label="Prévia do corte selecionado" hidden></video>
           </div>

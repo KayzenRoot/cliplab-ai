@@ -8,6 +8,7 @@ from uuid import uuid4
 
 ACTIVE = {
     "VALIDATING",
+    "IMPORTING",
     "EXTRACTING_AUDIO",
     "TRANSCRIBING",
     "ANALYZING",

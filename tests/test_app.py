@@ -156,6 +156,127 @@ def test_simultaneous_zip_requests_serialize_disk_writes(client, monkeypatch):
         assert first.result(timeout=5).status_code == 200
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://youtu.be/YE7VzlLtp-4?si=ignored",
+        "https://www.youtube.com/watch?v=YE7VzlLtp-4&list=PLother",
+        "https://m.youtube.com/live/YE7VzlLtp-4",
+        "https://www.youtube.com/shorts/YE7VzlLtp-4",
+    ],
+)
+def test_youtube_job_accepts_only_the_link_and_confirmation(client, url):
+    http, config, store = client
+    response = http.post(
+        "/api/jobs/youtube",
+        headers=HEADERS,
+        json={
+            "youtube_url": url,
+            "authorized": True,
+        },
+    )
+    assert response.status_code == 202
+    job = response.json()
+    assert job["source"]["youtube_url"] == "https://www.youtube.com/watch?v=YE7VzlLtp-4"
+    assert job["source"]["authorized"] is True
+    assert store.get(job["id"])["stored_name"] is None
+    assert not list((config.data / "input").iterdir())
+    assert store.next_work() == (job["id"], None)
+
+
+@pytest.mark.parametrize(
+    "url, authorized",
+    [
+        ("https://youtube.com.example.org/watch?v=YE7VzlLtp-4", True),
+        ("https://youtube.com@127.0.0.1/watch?v=YE7VzlLtp-4", True),
+        ("https://www.youtube.com/playlist?list=PLother", True),
+        ("https://www.youtube.com:443/watch?v=YE7VzlLtp-4", True),
+        ("https://youtu.be/YE7VzlLtp-4", False),
+    ],
+)
+def test_youtube_job_rejects_invalid_requests(client, url, authorized):
+    http, _, store = client
+    response = http.post(
+        "/api/jobs/youtube",
+        headers=HEADERS,
+        json={
+            "youtube_url": url,
+            "authorized": authorized,
+        },
+    )
+    assert response.status_code == 422
+    assert not store.list_jobs()
+
+
+def test_youtube_worker_downloads_once_and_reuses_source(tmp_path, monkeypatch):
+    import cliplab.worker as worker_module
+
+    calls = []
+
+    def download(identifier, staging, config, minimum, *, cancel, progress):
+        progress(35)
+        assert not cancel()
+        calls.append(identifier)
+        source = staging / "source.mkv"
+        source.write_bytes(b"fixture")
+        return source, "Título importado", "Canal de teste"
+
+    def audio(*_, **_kwargs):
+        raise worker_module.MediaError("Interrupção controlada.")
+
+    monkeypatch.setattr(worker_module, "download_video", download)
+    monkeypatch.setattr(worker_module, "probe_source", lambda *_, **_kwargs: {"duration": 100})
+    monkeypatch.setattr(worker_module, "extract_audio", audio)
+    app = create_app(Config(tmp_path, min_free=MIB), run_worker=False)
+    with TestClient(app, base_url="http://127.0.0.1") as http:
+        job = http.post(
+            "/api/jobs/youtube",
+            headers=HEADERS,
+            json={
+                "youtube_url": "https://youtu.be/YE7VzlLtp-4",
+                "authorized": True,
+            },
+        ).json()
+        endpoint = f"/api/jobs/{job['id']}"
+        worker = worker_module.Worker(app.state.store, Config(tmp_path, min_free=MIB))
+        worker.process(job["id"])
+        failed = http.get(endpoint).json()
+        assert failed["state"] == "FAILED"
+        assert failed["filename"] == "Título importado"
+        assert failed["source"]["author"] == "Canal de teste"
+        assert (tmp_path / "input" / job["id"] / "source.mkv").read_bytes() == b"fixture"
+        assert http.post(f"{endpoint}/retry", headers=HEADERS).status_code == 202
+        worker.process(job["id"])
+        assert calls == ["YE7VzlLtp-4"]
+        assert not list((tmp_path / "tmp").iterdir())
+
+
+def test_youtube_worker_blocks_an_unavailable_video(tmp_path, monkeypatch):
+    import cliplab.worker as worker_module
+
+    def unavailable(*_, **_kwargs):
+        raise worker_module.YouTubeUnavailable("O vídeo precisa ser público.")
+
+    monkeypatch.setattr(worker_module, "download_video", unavailable)
+    app = create_app(Config(tmp_path, min_free=MIB), run_worker=False)
+    with TestClient(app, base_url="http://127.0.0.1") as http:
+        job = http.post(
+            "/api/jobs/youtube",
+            headers=HEADERS,
+            json={
+                "youtube_url": "https://youtu.be/YE7VzlLtp-4",
+                "authorized": True,
+            },
+        ).json()
+        worker = worker_module.Worker(app.state.store, Config(tmp_path, min_free=MIB))
+        worker.process(job["id"])
+        blocked = http.get(f"/api/jobs/{job['id']}").json()
+        assert blocked["state"] == "BLOCKED"
+        assert blocked["error"] == "O vídeo precisa ser público."
+        assert not list((tmp_path / "input").iterdir())
+        assert not list((tmp_path / "tmp").iterdir())
+
+
 def test_persistent_queue_recovery_and_cancel(client):
     http, config, store = client
     one = upload(http, r"..\..\minha live.MOV", youtube_url="https://youtu.be/exemplo").json()

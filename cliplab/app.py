@@ -35,6 +35,7 @@ from .store import (
     revision_files,
 )
 from .worker import Blocked, Worker, read_transcript, require_disk
+from .youtube import video_id, watch_url
 
 PACKAGE = Path(__file__).resolve().parent
 ID = re.compile(r"[a-f0-9]{32}")
@@ -51,6 +52,45 @@ class ClipPatch(BaseModel):
     hook: Annotated[str, Field(max_length=140)] | None = None
     description: Annotated[str, Field(max_length=1200)] | None = None
     status: Status | None = None
+
+
+class JobOptions(BaseModel):
+    count: Annotated[int, Field(ge=1, le=5)] = 3
+    minimum: Annotated[int, Field(ge=61, le=180)] = 75
+    maximum: Annotated[int, Field(ge=61, le=180)] = 100
+    language: Literal["auto", "pt"] = "auto"
+    preset: Literal["gameplay", "dossier"] = "dossier"
+    emphasis: Literal["low", "medium", "high"] = "medium"
+    music_mode: Literal["off", "procedural", "licensed"] = "off"
+    music_volume: Annotated[float, Field(ge=0, le=0.30)] = 0.12
+    music_id: Annotated[str | None, Field(max_length=32)] = None
+    use_ollama: bool = False
+
+
+class YouTubeJob(JobOptions):
+    youtube_url: Annotated[str, Field(min_length=1, max_length=2048)]
+    authorized: bool
+    license: Annotated[str, Field(max_length=500)] = ""
+
+
+def job_record(filename: str, source: dict, settings: dict, stored_name: str | None) -> dict:
+    return {
+        "id": identity(),
+        "filename": filename,
+        "stored_name": stored_name,
+        "created_at": now(),
+        "state": "CREATED",
+        "progress": 0,
+        "duration": None,
+        "message": "Na fila de processamento.",
+        "error": None,
+        "cancel_requested": False,
+        "clips": [],
+        "warnings": [],
+        "transcript_available": False,
+        "source": source,
+        "settings": settings,
+    }
 
 
 class LocalRequests:
@@ -222,7 +262,7 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
             store.initialize()
             store.recover()
             for old in (config.data / "tmp").iterdir():
-                if old.name.startswith(("audio-", "render-", "upload-", "zip-")):
+                if old.name.startswith(("audio-", "render-", "upload-", "zip-", "youtube-")):
                     try:
                         if old.is_dir() and not old.is_symlink():
                             shutil.rmtree(old)
@@ -295,6 +335,40 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
     def jobs():
         return [present(job) for job in store.list_jobs()]
 
+    def job_settings(options: JobOptions, authorized: bool) -> dict:
+        if not authorized:
+            raise HTTPException(422, "Confirme a titularidade ou a licença comercial da gravação.")
+        if options.maximum < options.minimum:
+            raise HTTPException(422, "A duração máxima deve ser igual ou maior que a mínima.")
+        values = options.model_dump(include=set(JobOptions.model_fields))
+        if options.music_mode == "licensed":
+            store.music(valid_id(options.music_id or ""))
+        else:
+            values["music_id"] = None
+        return values
+
+    @app.post("/api/jobs/youtube", status_code=202)
+    def submit_youtube(body: YouTubeJob):
+        values = job_settings(body, body.authorized)
+        try:
+            identifier = video_id(body.youtube_url)
+        except ValueError as exc:
+            raise HTTPException(422, "Cole o link de um vídeo individual do YouTube.") from exc
+
+        source = {
+            "kind": "youtube",
+            "video_id": identifier,
+            "youtube_url": watch_url(identifier),
+            "author": "",
+            "origin": "YouTube",
+            "license": " ".join(body.license.split())
+            or "Direitos de edição e uso comercial declarados",
+            "authorized": body.authorized,
+        }
+        result = store.create(job_record(f"Vídeo {identifier}", source, values, stored_name=None))
+        signal()
+        return present(result)
+
     @app.post("/api/jobs", status_code=202)
     def upload_video(
         file: Annotated[UploadFile, File()],
@@ -314,12 +388,19 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
         music_id: Annotated[str | None, Form(max_length=32)] = None,
         use_ollama: Annotated[bool, Form()] = False,
     ):
-        if not authorized:
-            raise HTTPException(422, "Confirme a titularidade ou a licença comercial da gravação.")
-        if maximum < minimum:
-            raise HTTPException(422, "A duração máxima deve ser igual ou maior que a mínima.")
-        if music_mode == "licensed":
-            store.music(valid_id(music_id or ""))
+        options = JobOptions(
+            count=count,
+            minimum=minimum,
+            maximum=maximum,
+            language=language,
+            preset=preset,
+            emphasis=emphasis,
+            music_mode=music_mode,
+            music_volume=music_volume,
+            music_id=music_id,
+            use_ollama=use_ollama,
+        )
+        values = job_settings(options, authorized)
         source = {
             "author": label(author),
             "origin": label(origin),
@@ -328,36 +409,7 @@ def create_app(config: Config | None = None, *, run_worker: bool = True) -> Fast
             "authorized": authorized,
         }
         filename, suffix = upload_name(file, VIDEO_SUFFIXES)
-        job_id = identity()
-        stored_name = f"source{suffix}"
-        record = {
-            "id": job_id,
-            "filename": filename,
-            "stored_name": stored_name,
-            "created_at": now(),
-            "state": "CREATED",
-            "progress": 0,
-            "duration": None,
-            "message": "Na fila de processamento.",
-            "error": None,
-            "cancel_requested": False,
-            "clips": [],
-            "warnings": [],
-            "transcript_available": False,
-            "source": source,
-            "settings": {
-                "count": count,
-                "minimum": minimum,
-                "maximum": maximum,
-                "language": language,
-                "preset": preset,
-                "emphasis": emphasis,
-                "music_mode": music_mode,
-                "music_volume": music_volume,
-                "music_id": music_id if music_mode == "licensed" else None,
-                "use_ollama": use_ollama,
-            },
-        }
+        record = job_record(filename, source, values, stored_name=f"source{suffix}")
         save_upload(file, config, "input", record, config.max_upload, store.create)
         signal()
         return present(record)

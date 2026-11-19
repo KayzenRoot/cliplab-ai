@@ -30,7 +30,7 @@ button, input, select, textarea, output { font: inherit; }
 button, select { cursor: pointer; }
 button:disabled { cursor: default; opacity: .5; }
 :focus-visible { outline: 2px solid var(--aqua); outline-offset: 3px; }
-.visually-hidden, .skip-link:not(:focus) {
+.skip-link:not(:focus) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -84,25 +84,6 @@ button:disabled { cursor: default; opacity: .5; }
 .mono { font: .75rem/1.4 var(--mono); }
 .muted { color: var(--muted); }
 .split { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; }
-
-.drop-zone {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  padding: 1.35rem .75rem;
-  border: 1px dashed #666d87;
-  border-radius: .85rem;
-  min-height: 11rem;
-  text-align: center;
-  background: radial-gradient(ellipse at 50% -60%, #374855 0%, transparent 74%), #171923;
-  transition: background-color .18s ease, border-color .18s ease;
-}
-.drop-zone.dragging, .drop-zone:focus-within { border-color: var(--aqua); background-color: #242e38; }
-.drop-zone label { display: block; margin-top: .5rem; font-weight: 680; }
-.drop-zone p { margin: .13rem 0 .65rem; color: var(--muted); font-size: .8rem; }
-.drop-zone output, .file-name { max-width: 100%; overflow-wrap: anywhere; }
-.upload-glyph { width: 2.15rem; height: 2.15rem; display: grid; place-items: center; border: 1px solid #4c797b; border-radius: .65rem; color: var(--aqua); background: #253441; font: 650 1.35rem/1 var(--display); }
-.file-name:not(:empty) { color: var(--aqua); display: block; padding-top: .45rem; font-size: .84rem; }
 
 .form-section { min-inline-size: 0; border: 0; padding: 0; margin: 1.25rem 0 0; }
 .form-section legend { width: 100%; border-top: 1px solid var(--line); padding: .95rem 0 .7rem; font-size: .94rem; font-weight: 700; }
@@ -166,7 +147,6 @@ input:is([type="checkbox"], [type="range"]), progress { accent-color: var(--aqua
 .warnings { padding-left: 1.75rem; color: #ffe0ae; border-color: #594a3f; background: #2b2525; }
 .warnings li + li { margin-top: .25rem; }
 .form-notice { color: var(--aqua); margin: .7rem 0 0; font-size: .82rem; }
-.upload-meter { margin-top: .65rem; color: var(--muted); font-size: .8rem; }
 progress { display: block; width: 100%; height: .6rem; border: 0; border-radius: .5rem; overflow: hidden; background: #303444; }
 progress::-webkit-progress-bar { background: #303444; }
 progress::-webkit-progress-value { background: linear-gradient(90deg, #59c9c9, var(--aqua)); border-radius: .5rem; }

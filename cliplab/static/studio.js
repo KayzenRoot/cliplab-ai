@@ -9,6 +9,7 @@ const loadGuard = { "X-ClipLab": "1" };
 const stages = {
   CREATED: "Na fila",
   VALIDATING: "Validando gravação",
+  IMPORTING: "Importando do YouTube",
   EXTRACTING_AUDIO: "Extraindo áudio",
   TRANSCRIBING: "Transcrevendo áudio",
   ANALYZING: "Analisando a transcrição",
@@ -23,8 +24,6 @@ const stages = {
 const stoppedStates = new Set(["FAILED", "CANCELLED", "BLOCKED"]);
 const clipStates = { pending: "Em revisão", approved: "Aprovado", discarded: "Descartado" };
 
-let recordingFile = null;
-let maxUploadBytes = 0;
 let tracks = [];
 let currentJobId = null;
 let currentJob = null;
@@ -86,12 +85,6 @@ function actionLink(id, url) {
   link.hidden = !url;
 }
 
-function formatBytes(bytes) {
-  const unit = bytes >= 1024 ** 3 ? "gigabyte" : bytes >= 1024 ** 2 ? "megabyte" : "kilobyte";
-  const divisor = { gigabyte: 1024 ** 3, megabyte: 1024 ** 2, kilobyte: 1024 }[unit];
-  return new Intl.NumberFormat("pt-BR", { style: "unit", unit, maximumFractionDigits: 1 }).format(bytes / divisor);
-}
-
 function timestamp(seconds) {
   const total = Math.round(seconds * 1000);
   const hours = Math.floor(total / 3600000);
@@ -101,72 +94,6 @@ function timestamp(seconds) {
   const ms = String(total % 1000).padStart(3, "0");
   return (hours ? String(hours).padStart(2, "0") + ":" : "") + clock + "." + ms;
 }
-
-function setFile(file) {
-  if (!file) return;
-  recordingFile = null;
-  byId("file-name").textContent = "";
-  notice("form-error", "");
-  if (!/\.(mp4|mkv|mov)$/i.test(file.name)) {
-    notice("form-error", "Escolha uma gravação nos formatos MP4, MKV ou MOV.");
-    return;
-  }
-  if (!file.size || (maxUploadBytes && file.size > maxUploadBytes)) {
-    notice("form-error", !file.size ? "O arquivo selecionado está vazio." : "O arquivo supera o limite de " + formatBytes(maxUploadBytes) + ".");
-    return;
-  }
-  recordingFile = file;
-  byId("file-name").textContent = file.name + " · " + formatBytes(file.size);
-}
-
-function uploadRecording(formData) {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    const progress = byId("upload-progress");
-    request.open("POST", "/api/jobs");
-    request.setRequestHeader("X-ClipLab", "1");
-    request.responseType = "json";
-    progress.removeAttribute("value");
-    notice("upload-status", "Enviando gravação…");
-    request.upload.addEventListener("progress", (event) => {
-      if (!event.lengthComputable) return;
-      const percent = Math.round(100 * event.loaded / event.total);
-      progress.value = percent;
-      notice("upload-status", percent < 100 ? "Enviando gravação · " + percent + "%" : "Registrando gravação…");
-    });
-    request.addEventListener("load", () => {
-      if (request.status >= 200 && request.status < 300 && request.response?.id) resolve(request.response.id);
-      else reject(new Error(message(request.response, "Não foi possível registrar a gravação.")));
-    });
-    request.addEventListener("error", () => reject(new Error("A conexão foi perdida durante o envio da gravação.")));
-    request.send(formData);
-  });
-}
-
-const dropZone = byId("drop-zone");
-byId("choose-file").addEventListener("click", () => byId("file").click());
-byId("file").addEventListener("change", (event) => setFile(event.target.files[0]));
-for (const eventName of ["dragenter", "dragover"]) {
-  dropZone.addEventListener(eventName, (event) => {
-    event.preventDefault();
-    if (!byId("generate").disabled) dropZone.classList.add("dragging");
-  });
-}
-dropZone.addEventListener("dragleave", (event) => {
-  if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove("dragging");
-});
-dropZone.addEventListener("drop", (event) => {
-  event.preventDefault();
-  dropZone.classList.remove("dragging");
-  if (byId("generate").disabled) return;
-  if (event.dataTransfer.files.length > 1) {
-    recordingFile = null;
-    byId("file-name").textContent = "";
-    notice("form-error", "Envie uma gravação por vez para configurar seus cortes.");
-    return;
-  }
-  setFile(event.dataTransfer.files[0]);
-});
 
 function updateMusicFields() {
   const mode = byId("music-mode").value;
@@ -218,28 +145,21 @@ musicForm.addEventListener("submit", async (event) => {
 
 jobForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (byId("generate").disabled) return;
   notice("form-error", "");
-  if (!recordingFile) {
-    notice("form-error", "Selecione uma gravação para gerar cortes.");
-    byId("choose-file").focus();
-    return;
-  }
   const formData = new FormData(jobForm);
   if (Number(formData.get("minimum")) > Number(formData.get("maximum"))) {
     notice("form-error", "A duração máxima precisa ser igual ou maior que a mínima.");
     jobForm.elements.maximum.focus();
     return;
   }
-  formData.set("file", recordingFile, recordingFile.name);
   byId("generate").disabled = true;
-  byId("choose-file").disabled = true;
-  byId("file").disabled = true;
-  byId("upload-meter").hidden = false;
   try {
-    const id = await uploadRecording(formData);
-    recordingFile = null;
-    byId("file").value = "";
-    byId("file-name").textContent = "";
+    const { id } = await api("/api/jobs/youtube", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.fromEntries(formData)),
+    });
     await selectProject(id);
     await updateProjects(id).catch((error) => notice("connection-error", error.message));
     byId("review-heading").focus();
@@ -247,9 +167,6 @@ jobForm.addEventListener("submit", async (event) => {
     notice("form-error", error.message);
   } finally {
     byId("generate").disabled = false;
-    byId("choose-file").disabled = false;
-    byId("file").disabled = false;
-    byId("upload-meter").hidden = true;
   }
 });
 
@@ -398,7 +315,7 @@ function renderProject() {
     byId("empty-preview").hidden = false;
     const pending = job && activeJob(job);
     notice("preview-heading", pending ? "Preparando seus cortes" : job ? "Sem prévias disponíveis" : "Seus cortes aparecem aqui");
-    notice("preview-detail", job ? "Acompanhe o estado do processamento acima." : "Envie uma gravação para começar.");
+    notice("preview-detail", job ? "Acompanhe o estado do processamento acima." : "Cole um link do YouTube para começar.");
     byId("monitor-duration").textContent = "Formato vertical";
   }
   if (!job) return;
@@ -407,7 +324,7 @@ function renderProject() {
       ["Autor", job.source.author],
       ["Origem", job.source.origin],
       ["Licença e condições", job.source.license],
-      ["Referência do YouTube", job.source.youtube_url],
+      ["Link do YouTube", job.source.youtube_url],
     ]);
   }
   notice("job-state", stages[job.state] || job.state);
@@ -570,8 +487,6 @@ async function initialize() {
   const requested = new URLSearchParams(window.location.search).get("job");
   const checks = await Promise.allSettled([
     api("/api/config").then((config) => {
-      maxUploadBytes = config.max_upload_bytes;
-      if (maxUploadBytes) notice("upload-limit", "· até " + formatBytes(maxUploadBytes));
       byId("ollama-option").hidden = !config.ollama_enabled;
     }),
     loadTracks(),

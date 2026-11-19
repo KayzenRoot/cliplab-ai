@@ -4,7 +4,7 @@ Estúdio local para transformar gravações autorizadas em cortes verticais com 
 
 ## Instalação e início
 
-Instale Python **3.12** e uma distribuição do FFmpeg com FFprobe, libass e libx264 no PATH. No Windows, o pacote `winget install --id Gyan.FFmpeg --exact` fornece as ferramentas de mídia. No Ubuntu, instale `ffmpeg` e `fonts-dejavu-core`, além de Python 3.12 e seu módulo `venv`.
+Instale Python **3.12**, Node.js **22 ou mais recente** (ou Deno **2.3 ou mais recente**) e uma distribuição do FFmpeg com FFprobe, libass e libx264 no PATH. No Windows, o pacote `winget install --id Gyan.FFmpeg --exact` fornece as ferramentas de mídia. No Ubuntu, instale `ffmpeg` e `fonts-dejavu-core`, além de Python 3.12 e seu módulo `venv`. A importação usa uma conexão com o YouTube. [Requisitos do importador](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
 
 Clone o repositório e, dentro dele, use um dos scripts:
 
@@ -24,7 +24,7 @@ Os scripts criam `.venv`, instalam as dependências e iniciam o serviço em [127
 
 ## Gerar o primeiro corte
 
-1. Arraste uma gravação MP4, MKV ou MOV com áudio, informe autoria, origem e licença, e confirme a autorização comercial. Use o arquivo original ou uma cópia obtida de forma autorizada, como a exportação dos próprios vídeos pelo YouTube Studio. A URL, quando preenchida, identifica a fonte. [Ajuda do YouTube](https://support.google.com/youtube/answer/56100?hl=pt-BR)
+1. Cole o link de um vídeo público do YouTube ou de uma live pública que já tenha gravação disponível. Confirme que tem direito de edição e uso comercial. O ClipLab importa a gravação e registra o canal e a origem automaticamente.
 2. Escolha de um a cinco cortes, os limites de duração, idioma, preset e trilha. Clique em **Gerar cortes com IA** e acompanhe a fila. O preset **Gameplay** preserva o enquadramento. **Dossiê Leonida** aplica identidade grafite, ciano e magenta e uma pergunta editorial quando disponível.
 3. Confira a prévia, revise a precisão das legendas e ajuste início, fim, título, gancho ou descrição. Revise o resultado atualizado e aprove os cortes desejados.
 4. Use **Exportar MP4** nos cortes aprovados. Baixe o MP4 final, o SRT ou o ZIP com as mídias aprovadas e exportadas, a transcrição e os metadados editoriais. Em trilhas licenciadas, o ZIP inclui os créditos informados no cadastro quando a faixa foi aplicada.
@@ -33,7 +33,7 @@ A trilha procedural é sintetizada localmente. Para usar uma faixa própria ou l
 
 ## Operação local
 
-Copie `.env.example` para `.env` para alterar as configurações. Os padrões permitem 12 GiB de upload, oito horas de gravação e preservam 768 MiB de espaço livre, além da estimativa da operação. A fila executa uma transcrição ou renderização por vez. **Ollama** é opcional. Configure um modelo instalado localmente com `CLIPLAB_OLLAMA_MODEL` e habilite a avaliação semântica no projeto. O classificador sugere notas para janelas existentes e a seleção determinística assume se o modelo estiver indisponível. [API do Ollama](https://docs.ollama.com/api/generate)
+Copie `.env.example` para `.env` para alterar as configurações. Os padrões permitem 12 GiB por gravação, oito horas por fonte e preservam 768 MiB de espaço livre, além da estimativa da operação. A fila processa a importação, a transcrição e a renderização sequencialmente. O importador opera sem autenticação e depende da disponibilidade do vídeo público na conexão local. **Ollama** é opcional. Configure um modelo instalado localmente com `CLIPLAB_OLLAMA_MODEL` e habilite a avaliação semântica no projeto. O classificador sugere notas para janelas existentes e a seleção determinística assume se o modelo estiver indisponível. [API do Ollama](https://docs.ollama.com/api/generate)
 
 O diretório `data/` contém `input/`, `output/`, `cache/`, `music/`, `logs/`, `tmp/` e o banco SQLite. O progresso e os cortes sobrevivem ao reinício. O reprocessamento reaproveita a transcrição concluída do mesmo projeto. Mantenha esse diretório em armazenamento privado e local.
 
